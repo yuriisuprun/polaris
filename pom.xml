@@ -16,6 +16,9 @@
         <module>polaris-reactor</module>
         <module>polaris-config-yaml</module>
         <module>polaris-demo</module>
+        <module>polaris-dsl</module>
+        <module>polaris-reactor</module>
+        <module>polaris-config-yaml</module>
     </modules>
 
     <properties>
