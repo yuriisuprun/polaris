@@ -11,9 +11,6 @@ bin/
 *.nar
 *.zip
 *.tar.gz
-*.iml
-*.iws
-*.ipr
 
 # ===============================
 # Maven specific
@@ -42,7 +39,6 @@ out/
 .project
 .classpath
 .cproject
-bin/
 tmp/
 
 # VS Code
@@ -68,7 +64,6 @@ $RECYCLE.BIN/
 # ===============================
 # Logs and temporary files
 # ===============================
-*.log
 *.tmp
 *.swp
 *.swo
