@@ -1,69 +1,122 @@
-# 🌍 TripMate
+🌌 Polaris – composable fault-tolerance DSL library for Java
 
-TripMate is a **microservice-based travel booking platform** built using modern Java and DevOps technologies.  
-It demonstrates how to design, containerize and orchestrate multiple microservices with **Spring Boot 3**, **Java 21**, and **Docker**, following clean architectural and testing practices.
+Overview
 
----
+Polaris is a modern, fluent, and composable fault-tolerance library for Java.
 
-## 🚀 Tech Stack
+It enables developers to define retries, timeouts, circuit breakers, and fallbacks with a minimal, readable DSL. Unlike traditional libraries like Resilience4j, Polaris focuses on:
 
-**Backend:**
-- Java 21
-- Spring Boot 3 (Web, Security, Data JPA, Validation)
-- PostgreSQL
-- Spring Cloud (Config Server, Eureka, Gateway)
+Fluent composition with and() / orElse()
+Unified execution for synchronous, asynchronous, and reactive code
+Immutable and thread-safe policies
+Observability and metrics integration (Micrometer)
+YAML-based configuration and hot reload support
+Features
+Retry policies with max attempts, exception filtering, and backoff strategies (fixed/exponential)
+Timeout policies with hard enforcement and cancellation
+Circuit breakers with failure threshold, sliding window metrics, and state transitions
+Fallback policies (static or dynamic)
+Unified sync / async / reactive execution
 
-**DevOps & Infrastructure:**
-- Docker & Docker Compose
-- GitHub Actions (CI/CD)
-- AWS-ready (ECS / RDS compatible)
+DSL for composability:
 
-**Testing:**
-- JUnit 5
-- Testcontainers (for integration tests)
-- Mockito
+Policy<String> policy = retry(3)
+    .withBackoff(exponential(100))
+    .and(timeout(Duration.ofSeconds(2)))
+    .and(circuitBreaker(50, Duration.ofSeconds(10)))
+    .orElse(fallback(() -> "default"));
+Metrics: Retry count, failure rate, circuit state
+Events: Subscribe to policy lifecycle events
+YAML-based configuration with optional hot reload
+Quick Start
 
----
+Add Polaris to your Maven project:
 
-## 🧩 Repository Structure & Design Choice
+<dependency>
+    <groupId>com.polaris</groupId>
+    <artifactId>polaris-core</artifactId>
+    <version>1.0.0</version>
+</dependency>
+<dependency>
+    <groupId>com.polaris</groupId>
+    <artifactId>polaris-dsl</artifactId>
+    <version>1.0.0</version>
+</dependency>
+Basic Example
+import com.polaris.dsl.DSL.*;
+import java.time.Duration;
 
-TripMate is organized as a **monorepo** — meaning all microservices live within a single GitHub repository.
+public class Example {
+    public static void main(String[] args) {
+        Policy<String> policy = retry(3)
+            .withBackoff(exponential(100))
+            .and(timeout(Duration.ofSeconds(2)))
+            .and(circuitBreaker(5, Duration.ofSeconds(10)))
+            .orElse(fallback(() -> "fallback-value"));
 
-### 🧠 Why One Repository?
+        String result = policy.execute(() -> httpClient.get("https://api.example.com"));
+        System.out.println(result);
+    }
+}
+Async / Reactive Example
+CompletableFuture<String> future = policy.executeAsync(() ->
+    CompletableFuture.supplyAsync(() -> httpClient.get("https://api.example.com"))
+);
 
-While real-world enterprise systems often use separate repositories for each microservice, this project intentionally uses a **monorepo** for practical and demonstrative reasons:
+Mono<String> mono = ReactorAdapter.toMono(policy, () -> httpClient.getReactive("https://api.example.com"));
+YAML Configuration Example
+policy:
+  retry:
+    attempts: 5
+    backoff: exponential
+  timeout: 2s
+  circuitBreaker:
+    failureThreshold: 50
+    openDuration: 10s
 
-| ✅ Benefit | 💬 Explanation |
-|-------------|----------------|
-| **Easier to clone and run** | A single `git clone` gives you the entire system. You can spin up all services locally with one `docker compose up`. |
-| **Simplified CI/CD** | One GitHub Actions workflow builds and tests all microservices together. |
-| **Unified versioning** | Each release tag (e.g., `v1.0.0`) represents a consistent set of microservices. |
-| **Shared modules** | Common models and utilities can be reused across services without publishing to a remote package registry. |
-| **Better for demonstration** | Reviewers can explore and understand the full microservices architecture in one place. |
-| **Fast iteration** | Easier to make coordinated changes (e.g., shared DTOs or API contracts) without syncing multiple repos. |
+Load in Java:
 
-### 🚀 When to Split Into Multiple Repositories
+Policy<String> policy = PolicyLoader.load(new FileInputStream("policies.yaml"));
+Observability
 
-In large production systems, teams often separate microservices into their own repos to:
-- Manage independent release cycles
-- Assign different access controls per service
-- Reduce build times for unchanged modules
-- Support autonomous development teams
+Subscribe to policy events:
 
-For TripMate, however, a **single repo structure** provides the best balance between **clarity, maintainability, and demonstration value**.
+policy.events().subscribe(event -> {
+    if (event instanceof RetryEvent retry) {
+        System.out.println("Retry attempt: " + retry.attempt());
+    }
+});
 
----
+Metrics:
 
-## 🗂️ Repository Layout
+polaris.retry.count – Retry count
+polaris.circuit.state – Circuit breaker state
+polaris.execution.time – Execution duration
+Comparison with Resilience4j
+Feature	Polaris	Resilience4j
+DSL	Fluent, composable	Builder-heavy
+Sync/Async	Unified	Separate APIs
+Circuit breaker	Full state machine	Yes
+Retry	Exception filtering + backoff	Yes
+Reactive	Reactor support	Limited
+YAML Config	Yes, hot reload	Partial
+Why Polaris Exists
 
-tripmate/
-- auth-service/ # Authentication & JWT service
-- booking-service/ # Trip booking management
-- payment-service/ # Payment handling (mock)
-- notification-service/ # Email / push notifications
-- gateway-service/ # API gateway (Spring Cloud Gateway)
-- config-server/ # Centralized configuration
-- eureka-server/ # Service discovery
-- common-models/ # Shared DTOs and constants
-- docker-compose.yml # Local environment setup
-- pom.xml # Parent Maven configuration
+Polaris was created to reduce boilerplate and increase readability while still offering powerful fault-tolerance features.
+
+Developers no longer need separate builders for each policy
+Supports modern reactive programming
+Fully composable policies for microservices and async systems
+Advanced Features
+Simulation Mode – Test policies without executing real calls
+Debug Tracing – Print detailed decision logs
+Visualization Hooks – Export policy execution graphs
+Contributing
+Fork the repository
+Create a branch for your feature (git checkout -b feature/my-feature)
+Commit changes (git commit -m 'Add feature')
+Push (git push origin feature/my-feature)
+Open a pull request
+License
+
+Apache License 2.0
