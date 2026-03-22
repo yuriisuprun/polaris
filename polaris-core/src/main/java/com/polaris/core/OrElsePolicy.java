@@ -2,7 +2,6 @@ package com.polaris.core;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
 
 final class OrElsePolicy<T> implements Policy<T> {
