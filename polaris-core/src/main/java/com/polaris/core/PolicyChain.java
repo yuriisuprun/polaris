@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.concurrent.CompletionStage;
 
 public final class PolicyChain<T> implements Policy<T> {
 
