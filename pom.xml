@@ -4,21 +4,21 @@
                              https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
+
     <groupId>com.polaris</groupId>
     <artifactId>polaris</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
+
     <name>Polaris Fault Tolerance</name>
 
     <modules>
         <module>polaris-core</module>
         <module>polaris-dsl</module>
-        <module>polaris-reactor</module>
         <module>polaris-config-yaml</module>
         <module>polaris-demo</module>
-        <module>polaris-dsl</module>
-        <module>polaris-reactor</module>
-        <module>polaris-config-yaml</module>
+        <!-- ❗ REMOVE if not created -->
+        <!-- <module>polaris-reactor</module> -->
     </modules>
 
     <properties>
@@ -29,35 +29,69 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <!-- ✅ CENTRAL VERSION MANAGEMENT -->
     <dependencyManagement>
         <dependencies>
+
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>com.polaris</groupId>
+                <artifactId>polaris-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.polaris</groupId>
+                <artifactId>polaris-dsl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.polaris</groupId>
+                <artifactId>polaris-config-yaml</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- External -->
             <dependency>
                 <groupId>io.micrometer</groupId>
                 <artifactId>micrometer-core</artifactId>
                 <version>${micrometer.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
+
+            <!-- ✅ FIXED -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.dataformat</groupId>
+                <artifactId>jackson-dataformat-yaml</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-core</artifactId>
                 <version>3.5.9</version>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 
     <build>
         <pluginManagement>
             <plugins>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -68,17 +102,15 @@
                         <encoding>${project.build.sourceEncoding}</encoding>
                     </configuration>
                 </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.1.2</version>
-                    <configuration>
-                        <includes>
-                            <include>**/*Test.java</include>
-                        </includes>
-                    </configuration>
                 </plugin>
+
             </plugins>
         </pluginManagement>
     </build>
+
 </project>

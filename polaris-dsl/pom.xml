@@ -7,11 +7,14 @@
         <groupId>com.polaris</groupId>
         <artifactId>polaris</artifactId>
         <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
+
     <artifactId>polaris-dsl</artifactId>
     <name>Polaris DSL Module</name>
+    <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
@@ -19,4 +22,5 @@
             <artifactId>polaris-core</artifactId>
         </dependency>
     </dependencies>
+
 </project>
