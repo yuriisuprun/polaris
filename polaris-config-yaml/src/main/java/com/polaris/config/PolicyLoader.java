@@ -25,7 +25,7 @@ public final class PolicyLoader {
 
             // ===== Retry =====
             if (config.retry != null) {
-                var retryBuilder = DSL.<T>retry(config.retry.attempts);
+                var retryBuilder = DSL.retry(config.retry.attempts);
 
                 if (config.retry.backoff != null) {
                     retryBuilder.withBackoff(resolveBackoff(config.retry.backoff));
