@@ -12,9 +12,22 @@ public interface Policy<T> {
 
     CompletableFuture<T> executeAsync(Supplier<CompletableFuture<T>> supplier);
 
-    Policy<T> and(Policy<T> next);
+    /**
+     * Compose this policy with a next policy.
+     * <p>
+     * Composition is left-to-right and results in this policy being the outer policy:
+     * {@code retry.and(timeout)} means timeout is executed inside each retry attempt.
+     */
+    default Policy<T> and(Policy<T> next) {
+        return new AndPolicy<>(this, next);
+    }
 
-    Policy<T> orElse(Policy<T> fallback);
+    /**
+     * Provide a fallback policy executed when this policy fails.
+     */
+    default Policy<T> orElse(Policy<T> fallback) {
+        return new OrElsePolicy<>(this, fallback);
+    }
 
     EventPublisher events();
 }

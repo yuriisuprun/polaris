@@ -1,59 +1,106 @@
 package com.polaris.core;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-public final class RetryPolicy<T> implements PolicyExecutor<T> {
+public final class RetryPolicy<T> implements Policy<T> {
 
-    private final int maxAttempts;
+    private final int attempts;
     private final BackoffStrategy backoff;
     private final Predicate<Throwable> retryOn;
+    private final EventPublisher events = new EventPublisher();
 
-    public RetryPolicy(int maxAttempts, BackoffStrategy backoff, Predicate<Throwable> retryOn) {
-        this.maxAttempts = maxAttempts;
-        this.backoff = backoff;
-        this.retryOn = retryOn;
+    public RetryPolicy(int attempts, BackoffStrategy backoff, Predicate<Throwable> retryOn) {
+        if (attempts < 1) throw new IllegalArgumentException("attempts must be >= 1");
+        this.attempts = attempts;
+        this.backoff = Objects.requireNonNull(backoff, "backoff");
+        this.retryOn = Objects.requireNonNull(retryOn, "retryOn");
     }
 
     @Override
-    public CompletionStage<T> execute(ExecutionContext ctx, Supplier<CompletionStage<T>> next) {
-        CompletableFuture<T> result = new CompletableFuture<>();
-        attempt(1, result, ctx, next);
-        return result;
-    }
+    public T execute(CheckedSupplier<T> supplier) {
+        Objects.requireNonNull(supplier, "supplier");
 
-    private void attempt(int attempt, CompletableFuture<T> result,
-                         ExecutionContext ctx, Supplier<CompletionStage<T>> next) {
-        next.get().whenComplete((value, error) -> {
-            if (error == null) {
-                result.complete(value);
-                return;
+        Throwable last = null;
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                return supplier.get();
+            } catch (Throwable t) {
+                last = PolarisExceptions.unwrap(t);
+                if (attempt >= attempts || !retryOn.test(last)) {
+                    throw propagate(last);
+                }
+
+                long delay = Math.max(0L, backoff.nextDelay(attempt + 1));
+                events.publish(new RetryEvent(attempt, delay, last));
+                sleep(delay);
             }
-
-            Throwable cause = unwrap(error);
-
-            if (attempt >= maxAttempts || !retryOn.test(cause)) {
-                result.completeExceptionally(cause);
-                return;
-            }
-
-            long delay = backoff.nextDelay(attempt);
-
-            ScheduledFuture<?> scheduled = ScheduledExecutorHolder.scheduler().schedule(
-                    () -> attempt(attempt + 1, result, ctx, next),
-                    delay, TimeUnit.MILLISECONDS
-            );
-        });
-    }
-
-    private Throwable unwrap(Throwable t) {
-        if (t instanceof java.util.concurrent.CompletionException ce) {
-            return ce.getCause();
         }
-        return t;
+
+        // Should not be reachable, but keep compiler happy.
+        throw propagate(last != null ? last : new IllegalStateException("retry failed"));
+    }
+
+    @Override
+    public CompletableFuture<T> executeAsync(Supplier<CompletableFuture<T>> supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return attemptAsync(supplier, 1, null);
+    }
+
+    private CompletableFuture<T> attemptAsync(Supplier<CompletableFuture<T>> supplier, int attempt, Throwable lastError) {
+        CompletableFuture<T> current;
+        try {
+            current = supplier.get();
+        } catch (Throwable t) {
+            current = new CompletableFuture<>();
+            current.completeExceptionally(PolarisExceptions.unwrap(t));
+        }
+
+        return current.handle((value, throwable) -> {
+            if (throwable == null) {
+                return CompletableFuture.completedFuture(value);
+            }
+
+            Throwable cause = PolarisExceptions.unwrap(throwable);
+            if (attempt >= attempts || !retryOn.test(cause)) {
+                CompletableFuture<T> failed = new CompletableFuture<>();
+                failed.completeExceptionally(cause);
+                return failed;
+            }
+
+            long delay = Math.max(0L, backoff.nextDelay(attempt + 1));
+            events.publish(new RetryEvent(attempt, delay, cause));
+
+            CompletableFuture<T> delayed = new CompletableFuture<>();
+            ScheduledExecutorHolder.scheduler().schedule(
+                    () -> delayed.complete(null),
+                    delay,
+                    java.util.concurrent.TimeUnit.MILLISECONDS
+            );
+
+            return delayed.thenCompose(ignored -> attemptAsync(supplier, attempt + 1, cause));
+        }).thenCompose(f -> f);
+    }
+
+    @Override
+    public EventPublisher events() {
+        return events;
+    }
+
+    private static void sleep(long millis) {
+        if (millis <= 0) return;
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static RuntimeException propagate(Throwable t) {
+        if (t instanceof RuntimeException re) return re;
+        if (t instanceof Error e) throw e;
+        return new PolicyExecutionException(t);
     }
 }
