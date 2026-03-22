@@ -17,8 +17,7 @@
         <module>polaris-dsl</module>
         <module>polaris-config-yaml</module>
         <module>polaris-demo</module>
-        <!-- ❗ REMOVE if not created -->
-        <!-- <module>polaris-reactor</module> -->
+        <module>polaris-reactor</module>
     </modules>
 
     <properties>
@@ -49,6 +48,12 @@
             <dependency>
                 <groupId>com.polaris</groupId>
                 <artifactId>polaris-config-yaml</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.polaris</groupId>
+                <artifactId>polaris-reactor</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
