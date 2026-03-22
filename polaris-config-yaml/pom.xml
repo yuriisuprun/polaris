@@ -3,21 +3,29 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                              https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
+    <!-- ✅ Correct parent (root project) -->
     <parent>
         <groupId>com.polaris</groupId>
         <artifactId>polaris</artifactId>
         <version>1.0.0</version>
+        <!-- optional, but explicit -->
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- ✅ This module -->
     <artifactId>polaris-config-yaml</artifactId>
     <name>Polaris YAML Config Module</name>
+    <packaging>jar</packaging>
 
     <dependencies>
+        <!-- Internal modules -->
         <dependency>
             <groupId>com.polaris</groupId>
             <artifactId>polaris-core</artifactId>
         </dependency>
+
         <dependency>
             <groupId>com.polaris</groupId>
             <artifactId>polaris-dsl</artifactId>
@@ -29,4 +37,5 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
         </dependency>
     </dependencies>
+
 </project>
