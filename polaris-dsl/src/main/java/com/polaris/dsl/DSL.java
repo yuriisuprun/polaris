@@ -7,7 +7,8 @@ import java.util.function.Supplier;
 
 public final class DSL {
 
-    private DSL() {}
+    private DSL() {
+    }
 
     public static RetryBuilder retry(int attempts) {
         return new RetryBuilder(attempts);

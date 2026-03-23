@@ -39,7 +39,6 @@ public final class RetryPolicy<T> implements Policy<T> {
             }
         }
 
-        // Should not be reachable, but keep compiler happy.
         throw propagate(last != null ? last : new IllegalStateException("retry failed"));
     }
 

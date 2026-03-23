@@ -28,11 +28,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-    <!-- ✅ CENTRAL VERSION MANAGEMENT -->
     <dependencyManagement>
         <dependencies>
 
-            <!-- Internal modules -->
             <dependency>
                 <groupId>com.polaris</groupId>
                 <artifactId>polaris-core</artifactId>
@@ -70,7 +68,6 @@
                 <version>${jackson.version}</version>
             </dependency>
 
-            <!-- ✅ FIXED -->
             <dependency>
                 <groupId>com.fasterxml.jackson.dataformat</groupId>
                 <artifactId>jackson-dataformat-yaml</artifactId>

@@ -1,6 +1,8 @@
 package com.polaris.dsl;
 
-import com.polaris.core.*;
+import com.polaris.core.BackoffStrategy;
+import com.polaris.core.Policy;
+import com.polaris.core.RetryPolicy;
 
 import java.util.ArrayList;
 import java.util.List;
