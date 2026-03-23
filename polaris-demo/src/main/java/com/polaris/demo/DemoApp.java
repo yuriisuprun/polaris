@@ -5,9 +5,7 @@ import com.polaris.core.Policy;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Demo application for Polaris.
- */
+
 public class DemoApp {
 
     public static void main(String[] args) {
