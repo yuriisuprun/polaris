@@ -21,7 +21,7 @@ public class DemoApp {
 
         // ====== Synchronous execution ======
         try {
-            String result = policy.execute(() -> unreliableCall());
+            String result = policy.execute(DemoApp::unreliableCall);
             System.out.println("Sync result: " + result);
         } catch (Exception e) {
             System.err.println("Sync call failed: " + e.getMessage());
