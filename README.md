@@ -1,49 +1,128 @@
-🌌 Polaris – composable fault-tolerance DSL library for Java
+# 🌌 Polaris
 
-Overview
+**Composable Fault-Tolerance DSL for Modern Java**
 
-Polaris is a modern, fluent, and composable fault-tolerance library for Java.
+---
 
-It enables developers to define retries, timeouts, circuit breakers, and fallbacks with a minimal, readable DSL. Unlike traditional libraries like Resilience4j, Polaris focuses on:
+## Overview
 
-Fluent composition with and() / orElse()
-Unified execution for synchronous, asynchronous, and reactive code
-Immutable and thread-safe policies
-Observability and metrics integration (Micrometer)
-YAML-based configuration and hot reload support
-Features
-Retry policies with max attempts, exception filtering, and backoff strategies (fixed/exponential)
-Timeout policies with hard enforcement and cancellation
-Circuit breakers with failure threshold, sliding window metrics, and state transitions
-Fallback policies (static or dynamic)
-Unified sync / async / reactive execution
+**Polaris** is a modern, fluent, and composable fault-tolerance library for Java designed for high-performance, distributed, and reactive systems.
 
-DSL for composability:
+It provides a **concise DSL** to declaratively compose resilience strategies such as retries, timeouts, circuit breakers, and fallbacks—without the verbosity and fragmentation of traditional approaches.
 
+Polaris is built around a few core principles:
+
+* **Fluent composition over configuration-heavy builders**
+* **Unified execution model (sync, async, reactive)**
+* **Immutable, thread-safe policy definitions**
+* **First-class observability and metrics**
+* **Externalized configuration with hot reload**
+
+---
+
+## Key Features
+
+### Composable DSL
+
+Build complex fault-tolerance strategies with readable, chainable operators:
+
+```java
 Policy<String> policy = retry(3)
     .withBackoff(exponential(100))
     .and(timeout(Duration.ofSeconds(2)))
     .and(circuitBreaker(50, Duration.ofSeconds(10)))
     .orElse(fallback(() -> "default"));
-Metrics: Retry count, failure rate, circuit state
-Events: Subscribe to policy lifecycle events
-YAML-based configuration with optional hot reload
-Quick Start
+```
 
-Add Polaris to your Maven project:
+---
 
+### Retry Policies
+
+* Max attempts
+* Exception filtering
+* Backoff strategies:
+
+    * Fixed
+    * Exponential
+    * Custom
+
+---
+
+### Timeout Control
+
+* Hard time limits
+* Cancellation support
+* Works across sync and async executions
+
+---
+
+### Circuit Breaker
+
+* Sliding window metrics
+* Failure thresholds
+* Full state machine:
+
+    * Closed → Open → Half-Open
+
+---
+
+### Fallbacks
+
+* Static fallback values
+* Dynamic fallback functions
+* Context-aware fallback handling
+
+---
+
+### Unified Execution Model
+
+Execute the same policy across:
+
+* Synchronous code
+* `CompletableFuture`
+* Reactive streams (Project Reactor)
+
+---
+
+### Observability & Metrics
+
+* Built-in event system
+* Micrometer integration
+* Low-overhead instrumentation
+
+---
+
+### Configuration
+
+* YAML-based policy definitions
+* Environment-driven overrides
+
+---
+
+## Installation
+
+### Maven
+
+```xml
 <dependency>
     <groupId>com.polaris</groupId>
     <artifactId>polaris-core</artifactId>
     <version>1.0.0</version>
 </dependency>
+
 <dependency>
     <groupId>com.polaris</groupId>
     <artifactId>polaris-dsl</artifactId>
     <version>1.0.0</version>
 </dependency>
-Basic Example
-import com.polaris.dsl.DSL.*;
+```
+
+---
+
+## Quick Start
+
+```java
+import static com.polaris.dsl.DSL.*;
 import java.time.Duration;
 
 public class Example {
@@ -54,17 +133,45 @@ public class Example {
             .and(circuitBreaker(5, Duration.ofSeconds(10)))
             .orElse(fallback(() -> "fallback-value"));
 
-        String result = policy.execute(() -> httpClient.get("https://api.example.com"));
+        String result = policy.execute(() ->
+            httpClient.get("https://api.example.com")
+        );
+
         System.out.println(result);
     }
 }
-Async / Reactive Example
-CompletableFuture<String> future = policy.executeAsync(() ->
-    CompletableFuture.supplyAsync(() -> httpClient.get("https://api.example.com"))
-);
+```
 
-Mono<String> mono = ReactorAdapter.toMono(policy, () -> httpClient.getReactive("https://api.example.com"));
-YAML Configuration Example
+---
+
+## Async & Reactive Usage
+
+### CompletableFuture
+
+```java
+CompletableFuture<String> future = policy.executeAsync(() ->
+    CompletableFuture.supplyAsync(() ->
+        httpClient.get("https://api.example.com")
+    )
+);
+```
+
+### Reactor
+
+```java
+Mono<String> mono = ReactorAdapter.toMono(
+    policy,
+    () -> httpClient.getReactive("https://api.example.com")
+);
+```
+
+---
+
+## YAML Configuration
+
+Define policies declaratively:
+
+```yaml
 policy:
   retry:
     attempts: 5
@@ -73,50 +180,117 @@ policy:
   circuitBreaker:
     failureThreshold: 50
     openDuration: 10s
+```
 
-Load in Java:
+Load at runtime:
 
-Policy<String> policy = PolicyLoader.load(new FileInputStream("policies.yaml"));
-Observability
+```java
+Policy<String> policy =
+    PolicyLoader.load(new FileInputStream("policies.yaml"));
+```
 
-Subscribe to policy events:
+---
 
+## Observability
+
+### Event Subscription
+
+```java
 policy.events().subscribe(event -> {
     if (event instanceof RetryEvent retry) {
         System.out.println("Retry attempt: " + retry.attempt());
     }
 });
+```
 
-Metrics:
+---
 
-polaris.retry.count – Retry count
-polaris.circuit.state – Circuit breaker state
-polaris.execution.time – Execution duration
-Comparison with Resilience4j
-Feature	Polaris	Resilience4j
-DSL	Fluent, composable	Builder-heavy
-Sync/Async	Unified	Separate APIs
-Circuit breaker	Full state machine	Yes
-Retry	Exception filtering + backoff	Yes
-Reactive	Reactor support	Limited
-YAML Config	Yes, hot reload	Partial
-Why Polaris Exists
+### Metrics
 
-Polaris was created to reduce boilerplate and increase readability while still offering powerful fault-tolerance features.
+| Metric                   | Description           |
+| ------------------------ | --------------------- |
+| `polaris.retry.count`    | Total retry attempts  |
+| `polaris.circuit.state`  | Circuit breaker state |
+| `polaris.execution.time` | Execution latency     |
 
-Developers no longer need separate builders for each policy
-Supports modern reactive programming
-Fully composable policies for microservices and async systems
-Advanced Features
-Simulation Mode – Test policies without executing real calls
-Debug Tracing – Print detailed decision logs
-Visualization Hooks – Export policy execution graphs
-Contributing
-Fork the repository
-Create a branch for your feature (git checkout -b feature/my-feature)
-Commit changes (git commit -m 'Add feature')
-Push (git push origin feature/my-feature)
-Open a pull request
-License
+---
 
-Apache License 2.0
+## Comparison
+
+| Feature          | Polaris                      | Traditional Libraries |
+| ---------------- | ---------------------------- | --------------------- |
+| DSL              | Fluent, composable           | Builder-heavy         |
+| Sync / Async     | Unified                      | Separate APIs         |
+| Circuit Breaker  | Full state machine           | Yes                   |
+| Retry            | Advanced filtering + backoff | Yes                   |
+| Reactive Support | Native                       | Limited               |
+| YAML Config      | Yes (hot reload)             | Partial               |
+
+---
+
+## Why Polaris
+
+Polaris exists to eliminate the friction between **resilience and readability**.
+
+It enables:
+
+* Declarative fault-tolerance
+* Reduced boilerplate
+* Consistent execution across paradigms
+* Clean integration into microservices and reactive systems
+
+Instead of stitching together multiple components, Polaris lets you define **a single, composable policy pipeline**.
+
+---
+
+## Advanced Features
+
+* **Simulation Mode**
+  Validate policies without executing real calls
+
+* **Debug Tracing**
+  Inspect decision flow and policy behavior
+
+* **Visualization Hooks**
+  Export execution graphs for analysis and tooling
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+3. Commit your changes
+
+   ```bash
+   git commit -m "Add feature"
+   ```
+4. Push to your branch
+
+   ```bash
+   git push origin feature/my-feature
+   ```
+5. Open a Pull Request
+
+---
+
+## License
+
+Licensed under the **Apache License 2.0**.
+
+---
+
+## Roadmap
+
+* Kotlin DSL support
+* Spring Boot starter
+* Distributed tracing integration
+* Policy composition visualization UI
+
+---
+
+**Polaris brings clarity to resilience.**
