@@ -14,13 +14,10 @@
     <name>Polaris Reactor Support Module</name>
 
     <dependencies>
-        <!-- Core Polaris module -->
         <dependency>
             <groupId>com.polaris</groupId>
             <artifactId>polaris-core</artifactId>
         </dependency>
-
-        <!-- Reactor Core -->
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-core</artifactId>
