@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: study-helper-mcp
+    runtime: docker
+    repo: .
+    rootDir: study-helper-mcp
+    autoDeploy: true
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
