@@ -1,16 +1,34 @@
 # Study Helper MCP Server (FastAPI)
 
-Production-ready MCP-style tool server for learning workflows:
+Production-ready “tool server” for learning workflows (FastAPI HTTP API):
 
 - Flashcard generator
 - Quiz generator
 - Simple explanation tool
 - Spaced repetition scheduler (SM-2 inspired)
 
+This server is designed to be used from:
+
+- Your browser via Swagger UI (`/docs`)
+- `curl` / Postman / Insomnia
+- A small script (Python/JS) that calls the endpoints
+
 ## Requirements
 
 - Python 3.11+ (Docker image uses `python:3.11-slim`)
-- An OpenAI API key in `OPENAI_API_KEY`
+- An OpenAI API key in `OPENAI_API_KEY` (required in production)
+
+## Configuration
+
+Environment variables:
+
+- **`APP_ENV`**: `dev` (default) or `prod` / `production`
+- **`OPENAI_API_KEY`**: OpenAI API key
+- **`OPENAI_MODEL`**: model name (default `gpt-4.1-mini`)
+- **`OPENAI_TIMEOUT_S`**: request timeout seconds (default `30`)
+- **`OPENAI_MAX_RETRIES`**: retries for transient upstream failures (default `3`)
+- **`LOG_LEVEL`**: `DEBUG|INFO|WARNING|ERROR|CRITICAL` (default `INFO`)
+- **`STORAGE_PATH`**: JSON file path for spaced repetition state (default `./data/storage.json`)
 
 ## Local setup
 
@@ -33,6 +51,21 @@ Docs:
 - Swagger UI: `http://localhost:8000/docs`
 - Health: `http://localhost:8000/health`
 
+## How to use it for studying (recommended workflow)
+
+1. **Collect source material** into plain text:
+   - Copy/paste notes, a textbook section, or an article snippet
+   - Keep it focused (a few pages / a few thousand words works best)
+2. **Explain first** (`/explain_simple`) to get a clean mental model:
+   - Use `target_audience="beginner"` (default) or something more specific like `"high school"` / `"intermediate"`
+3. **Generate flashcards** (`/generate_flashcards`) from the same text:
+   - Start with `num_cards=10` and iterate
+4. **Create a quiz** (`/create_quiz`) to test recall:
+   - Start with `num_questions=5`, `num_options=4`
+5. **Schedule reviews** (`/schedule_review`) after each recall attempt:
+   - Use `difficulty` from `1` (easy) to `5` (hard)
+   - Use a stable `user_id` and `item_id` so the server can keep repetition state
+
 ## Docker
 
 ```bash
@@ -43,6 +76,11 @@ docker-compose up --build
 ```
 
 ## API usage examples (curl)
+
+Tip: every response includes:
+
+- **`X-Request-ID`**: request trace id (you can also send `X-Request-ID` yourself)
+- **`X-Response-Time-Ms`**: server processing time
 
 Generate flashcards:
 
@@ -93,6 +131,41 @@ curl -X POST http://localhost:8000/schedule_review \
     "previous_interval_days": 6,
     "ease_factor": 2.5
   }'
+```
+
+## Error responses
+
+All errors are returned in a consistent envelope:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "request_id": "..."
+  }
+}
+```
+
+Validation errors include `error.details` with field-level information.
+
+## Example: simple Python client
+
+```python
+import os
+import requests
+
+BASE = os.getenv("STUDY_HELPER_BASE_URL", "http://localhost:8000")
+
+payload = {
+    "topic": "Photosynthesis",
+    "text": "Photosynthesis converts light energy into chemical energy...",
+    "num_cards": 10,
+}
+
+r = requests.post(f"{BASE}/generate_flashcards", json=payload, timeout=60)
+r.raise_for_status()
+print(r.json())
 ```
 
 ## Render deployment (Docker runtime)
