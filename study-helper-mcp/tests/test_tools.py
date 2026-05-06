@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 class _FakeLLM:
-    def generate_structured(self, *, system_prompt: str, user_prompt: str, json_schema: dict):  # noqa: ARG002
+    async def generate_structured(self, *, system_prompt: str, user_prompt: str, json_schema: dict):  # noqa: ARG002
         # Return deterministic payloads compatible with our schemas.
         if "flashcards" in system_prompt.lower():
             return {"cards": [{"question": "Q1?", "answer": "A1."}, {"question": "Q2?", "answer": "A2."}]}
