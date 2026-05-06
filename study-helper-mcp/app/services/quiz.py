@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from app.core.llm import LLMError, get_llm
+from app.core import llm as llm_mod
+from app.core.errors import InvalidLLMOutputError, UpstreamLLMError
+from app.core.prompting import wrap_source_text
 from app.models.request import QuizRequest
 from app.models.response import CreateQuizResponse, QuizQuestion
-from app.utils.text import clean_text, truncate
+from app.utils.text import clean_text
 
 
 class QuizService:
@@ -39,8 +41,8 @@ class QuizService:
             "required": ["questions"],
         }
 
-    def create(self, req: QuizRequest) -> CreateQuizResponse:
-        text = truncate(clean_text(req.text), max_chars=18_000)
+    async def create(self, req: QuizRequest) -> CreateQuizResponse:
+        text = clean_text(req.text)
         schema = self._schema(max_questions=req.num_questions, max_options=req.num_options)
 
         system_prompt = (
@@ -52,14 +54,14 @@ class QuizService:
             f"Topic: {req.topic}\n"
             f"Create {req.num_questions} multiple-choice questions with exactly {req.num_options} options each.\n"
             "Make wrong options plausible. correct_index must point to the correct option.\n\n"
-            f"TEXT:\n{text}"
+            f"{wrap_source_text(text)}"
         )
 
-        llm = get_llm()
+        llm = llm_mod.get_llm()
         try:
-            out = llm.generate_structured(system_prompt=system_prompt, user_prompt=user_prompt, json_schema=schema)
-        except LLMError as e:
-            raise RuntimeError(str(e)) from e
+            out = await llm.generate_structured(system_prompt=system_prompt, user_prompt=user_prompt, json_schema=schema)
+        except llm_mod.LLMError as e:
+            raise UpstreamLLMError(str(e)) from e
 
         try:
             questions = [QuizQuestion.model_validate(q) for q in out.get("questions", [])]
@@ -69,4 +71,4 @@ class QuizService:
                     raise ValueError("correct_index out of range")
             return CreateQuizResponse(topic=req.topic, questions=questions)
         except (ValidationError, ValueError) as e:
-            raise RuntimeError("LLM returned invalid quiz structure") from e
+            raise InvalidLLMOutputError("LLM returned invalid quiz structure") from e
