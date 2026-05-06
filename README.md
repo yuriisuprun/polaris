@@ -183,7 +183,6 @@ Steps:
 ## Testing
 
 ```bash
-cd study-helper-mcp
 pytest -q
 ```
 
