@@ -6,6 +6,8 @@ import sys
 import time
 from typing import Any
 
+from app.core.context import get_request_id
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -48,10 +50,18 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        if not hasattr(record, "request_id"):
+            record.request_id = get_request_id()
+        return True
+
+
 def setup_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.setLevel(level.upper())
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler.addFilter(RequestIdFilter())
     root.handlers.clear()
     root.addHandler(handler)
