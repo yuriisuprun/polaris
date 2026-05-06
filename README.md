@@ -1,4 +1,4 @@
-# Study Helper MCP Server (FastAPI)
+# Memora MCP Server (FastAPI)
 
 Production-ready “tool server” for learning workflows (FastAPI HTTP API):
 

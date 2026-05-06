@@ -28,7 +28,7 @@ def create_app() -> FastAPI:
         raise RuntimeError("OPENAI_API_KEY must be set in production")
 
     app = FastAPI(
-        title="Study Helper MCP Server",
+        title="Memora - study helper MCP Server",
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
