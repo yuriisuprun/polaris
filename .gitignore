@@ -45,6 +45,7 @@ data/
 .DS_Store
 Thumbs.db
 .idea/
+*.iml
 .vscode/
 
 # Docker local overrides
