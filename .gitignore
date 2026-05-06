@@ -32,10 +32,9 @@ junit.xml
 # Logs
 *.log
 
-# Environment / secrets (keep .env.example committed)
+# Environment / secrets
 .env
 .env.*
-!.env.example
 
 # Local storage / runtime data
 data/
