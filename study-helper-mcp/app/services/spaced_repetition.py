@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 from app.data.storage import get_storage
+from app.core.errors import StorageError
 from app.models.request import ScheduleReviewRequest
 from app.models.response import ScheduleReviewResponse
 
@@ -16,49 +17,78 @@ class SpacedRepetitionService:
     - interval update: grows with ease, shrinks with difficulty
     """
 
-    def schedule(self, req: ScheduleReviewRequest) -> ScheduleReviewResponse:
+    async def schedule(self, req: ScheduleReviewRequest) -> ScheduleReviewResponse:
+        """
+        SM-2-ish algorithm with persisted repetition state.
+
+        Request keeps backwards-compatible inputs, but when we have stored state
+        we prefer it over client-supplied counters to prevent drift.
+        """
         d = int(req.difficulty)
-        prev = float(req.previous_interval_days)
-        ef = float(req.ease_factor)
+        storage = get_storage()
+
+        try:
+            stored = storage.get_review(user_id=req.user_id, item_id=req.item_id) or {}
+        except Exception as e:  # noqa: BLE001 (boundary)
+            raise StorageError() from e
+
+        # Backwards-compatible defaults (client-supplied), overridden by stored state if present.
+        prev_interval = float(stored.get("next_interval_days", req.previous_interval_days))
+        ef = float(stored.get("next_ease_factor", req.ease_factor))
+        repetition = int(stored.get("repetition", 0))
+        lapses = int(stored.get("lapses", 0))
 
         # Map difficulty -> "quality" (SM-2 uses 0..5, higher is better)
-        # Here: easy(1)->5, hard(5)->1
-        q = 6 - d
+        # easy(1)->5 ... hard(5)->1
+        quality = 6 - d
 
-        # Standard SM-2 ease adjustment formula
-        next_ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-        next_ef = max(1.3, min(3.5, next_ef))
+        # SM-2: if quality < 3 treat as a failed recall (lapse)
+        failed = quality < 3
 
-        if prev <= 0:
-            next_iv = 1.0 if d <= 2 else 0.5
-        elif prev < 1.5:
-            next_iv = 6.0 if d <= 2 else 2.0
+        # Ease factor adjustment (SM-2 standard)
+        next_ef = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+        next_ef = float(max(1.3, min(3.5, next_ef)))
+
+        if failed:
+            # Reset repetition; schedule a quick relearn.
+            repetition = 0
+            lapses += 1
+            next_interval = 1.0
         else:
-            # grow interval; difficulty dampens growth
-            growth = next_ef * (1.15 if d <= 2 else 0.85 if d == 3 else 0.6)
-            next_iv = max(0.5, prev * growth)
+            repetition += 1
+            if repetition == 1:
+                next_interval = 1.0
+            elif repetition == 2:
+                next_interval = 6.0
+            else:
+                next_interval = max(1.0, prev_interval * next_ef)
 
-        # clamp to reasonable bounds
-        next_iv = float(max(0.5, min(3650.0, next_iv)))
+        next_interval = float(max(0.5, min(3650.0, next_interval)))
 
         payload = {
             "user_id": req.user_id,
             "item_id": req.item_id,
             "difficulty": d,
-            "previous_interval_days": prev,
+            "previous_interval_days": prev_interval,
             "ease_factor": ef,
-            "next_interval_days": next_iv,
+            "next_interval_days": next_interval,
             "next_ease_factor": next_ef,
+            "repetition": repetition,
+            "lapses": lapses,
             "ts": int(time.time()),
         }
-        get_storage().upsert_review(user_id=req.user_id, item_id=req.item_id, payload=payload)
+
+        try:
+            storage.upsert_review(user_id=req.user_id, item_id=req.item_id, payload=payload)
+        except Exception as e:  # noqa: BLE001 (boundary)
+            raise StorageError() from e
 
         return ScheduleReviewResponse(
             user_id=req.user_id,
             item_id=req.item_id,
             difficulty=d,
-            previous_interval_days=prev,
+            previous_interval_days=prev_interval,
             ease_factor=ef,
-            next_interval_days=next_iv,
+            next_interval_days=next_interval,
             next_ease_factor=next_ef,
         )
