@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from hashlib import sha256
 from functools import lru_cache
 from typing import Any
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai.types.responses import Response
-from tenacity import RetryError, retry, stop_after_attempt, wait_exponential_jitter
+from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential_jitter
 
 from app.core.config import get_settings
 
@@ -20,15 +22,43 @@ class LLMError(RuntimeError):
 
 class LLMClient:
     def __init__(self, api_key: str, model: str, timeout_s: int, max_retries: int) -> None:
-        self._client = OpenAI(api_key=api_key, timeout=timeout_s)
+        self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_s)
         self._model = model
         self._max_retries = max_retries
+        self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._cache_ttl_s = 300.0
+        self._cache_max_items = 128
 
-    @retry(wait=wait_exponential_jitter(initial=1, max=8), stop=stop_after_attempt(3), reraise=True)
-    def _responses_create(self, **kwargs: Any) -> Response:
-        return self._client.responses.create(**kwargs)
+    def _cache_get(self, key: str) -> dict[str, Any] | None:
+        now = time.time()
+        hit = self._cache.get(key)
+        if not hit:
+            return None
+        expires_at, payload = hit
+        if expires_at < now:
+            self._cache.pop(key, None)
+            return None
+        return payload
 
-    def generate_structured(
+    def _cache_set(self, key: str, payload: dict[str, Any]) -> None:
+        now = time.time()
+        if len(self._cache) >= self._cache_max_items:
+            # Drop oldest entry (simple, deterministic).
+            oldest_key = min(self._cache.items(), key=lambda kv: kv[1][0])[0]
+            self._cache.pop(oldest_key, None)
+        self._cache[key] = (now + self._cache_ttl_s, payload)
+
+    async def _responses_create(self, **kwargs: Any) -> Response:
+        async for attempt in AsyncRetrying(
+            wait=wait_exponential_jitter(initial=1, max=8),
+            stop=stop_after_attempt(self._max_retries),
+            reraise=True,
+        ):
+            with attempt:
+                return await self._client.responses.create(**kwargs)
+        raise AssertionError("unreachable")
+
+    async def generate_structured(
         self,
         *,
         system_prompt: str,
@@ -39,8 +69,17 @@ class LLMClient:
         Enforces structured JSON output using OpenAI Responses JSON schema output.
         Raises LLMError if the model output cannot be parsed or validated by the API.
         """
+        cache_key = sha256(
+            (self._model + "\n" + system_prompt + "\n" + user_prompt + "\n" + json.dumps(json_schema, sort_keys=True)).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
-            resp = self._responses_create(
+            resp = await self._responses_create(
                 model=self._model,
                 input=[
                     {"role": "system", "content": system_prompt},
@@ -72,6 +111,7 @@ class LLMClient:
 
         if not isinstance(parsed, dict):
             raise LLMError("LLM JSON output must be an object")
+        self._cache_set(cache_key, parsed)
         return parsed
 
 
