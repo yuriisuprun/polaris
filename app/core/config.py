@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="dev", alias="APP_ENV")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     openai_timeout_s: int = Field(default=30, alias="OPENAI_TIMEOUT_S")
     openai_max_retries: int = Field(default=3, alias="OPENAI_MAX_RETRIES")
 
