@@ -7,8 +7,8 @@ from hashlib import sha256
 from functools import lru_cache
 from typing import Any
 
-from openai import AsyncOpenAI
-from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential_jitter
+from openai import AsyncOpenAI, RateLimitError
+from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential_jitter, retry_if_exception
 
 from app.core.config import get_settings
 
@@ -118,7 +118,7 @@ class LLMClient:
     ) -> dict[str, Any]:
         """
         Enforces structured JSON output using OpenAI chat.completions with JSON schema.
-        Falls back to JSON mode for models that don't support strict schema.
+        Handles rate limiting with exponential backoff.
         Raises LLMError if the model output cannot be parsed or validated by the API.
         """
         cache_key = sha256(
@@ -130,45 +130,42 @@ class LLMClient:
         if cached is not None:
             return cached
 
+        def is_rate_limit_error(exc: Exception) -> bool:
+            """Check if exception is a rate limit error."""
+            return isinstance(exc, RateLimitError) or (
+                hasattr(exc, "status_code") and exc.status_code == 429
+            )
+
         try:
             async for attempt in AsyncRetrying(
-                wait=wait_exponential_jitter(initial=2, max=60),
+                wait=wait_exponential_jitter(initial=4, max=120),
                 stop=stop_after_attempt(self._max_retries),
                 reraise=True,
+                retry=retry_if_exception(lambda e: is_rate_limit_error(e) or isinstance(e, Exception)),
             ):
                 with attempt:
-                    # Try with strict JSON schema first (for gpt-4o models)
-                    try:
-                        resp = await self._client.chat.completions.create(
-                            model=self._model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": user_prompt},
-                            ],
-                            response_format={
-                                "type": "json_schema",
-                                "json_schema": {
-                                    "name": "study_helper_output",
-                                    "schema": json_schema,
-                                    "strict": True,
-                                },
+                    resp = await self._client.chat.completions.create(
+                        model=self._model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        response_format={
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "study_helper_output",
+                                "schema": json_schema,
+                                "strict": True,
                             },
-                        )
-                    except Exception as schema_error:  # noqa: BLE001
-                        # Fallback to simple JSON mode for other models
-                        logger.info(f"Strict schema not supported, falling back to JSON mode: {schema_error}")
-                        resp = await self._client.chat.completions.create(
-                            model=self._model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": user_prompt},
-                            ],
-                            response_format={"type": "json_object"},
-                        )
+                        },
+                    )
+        except RateLimitError as e:
+            logger.error(f"Rate limited by OpenAI API: {e}")
+            raise LLMError("OpenAI API rate limit exceeded - please try again later") from e
         except RetryError as e:
             raise LLMError("LLM request failed after retries - check API key and rate limits") from e
         except Exception as e:  # noqa: BLE001 (boundary)
-            raise LLMError("LLM request failed") from e
+            raise LLMError(f"LLM request failed: {str(e)}") from e
 
         # Extract content from the new response format
         if not resp.choices or len(resp.choices) == 0:
