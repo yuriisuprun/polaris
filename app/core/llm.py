@@ -118,6 +118,7 @@ class LLMClient:
     ) -> dict[str, Any]:
         """
         Enforces structured JSON output using OpenAI chat.completions with JSON schema.
+        Falls back to JSON mode for models that don't support strict schema.
         Raises LLMError if the model output cannot be parsed or validated by the API.
         """
         cache_key = sha256(
@@ -136,21 +137,34 @@ class LLMClient:
                 reraise=True,
             ):
                 with attempt:
-                    resp = await self._client.chat.completions.create(
-                        model=self._model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        response_format={
-                            "type": "json_schema",
-                            "json_schema": {
-                                "name": "study_helper_output",
-                                "schema": json_schema,
-                                "strict": True,
+                    # Try with strict JSON schema first (for gpt-4o models)
+                    try:
+                        resp = await self._client.chat.completions.create(
+                            model=self._model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            response_format={
+                                "type": "json_schema",
+                                "json_schema": {
+                                    "name": "study_helper_output",
+                                    "schema": json_schema,
+                                    "strict": True,
+                                },
                             },
-                        },
-                    )
+                        )
+                    except Exception as schema_error:  # noqa: BLE001
+                        # Fallback to simple JSON mode for other models
+                        logger.info(f"Strict schema not supported, falling back to JSON mode: {schema_error}")
+                        resp = await self._client.chat.completions.create(
+                            model=self._model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            response_format={"type": "json_object"},
+                        )
         except RetryError as e:
             raise LLMError("LLM request failed after retries - check API key and rate limits") from e
         except Exception as e:  # noqa: BLE001 (boundary)
