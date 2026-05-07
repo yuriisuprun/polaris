@@ -131,7 +131,7 @@ class LLMClient:
 
         try:
             async for attempt in AsyncRetrying(
-                wait=wait_exponential_jitter(initial=1, max=8),
+                wait=wait_exponential_jitter(initial=2, max=60),
                 stop=stop_after_attempt(self._max_retries),
                 reraise=True,
             ):
@@ -152,7 +152,7 @@ class LLMClient:
                         },
                     )
         except RetryError as e:
-            raise LLMError("LLM request failed after retries") from e
+            raise LLMError("LLM request failed after retries - check API key and rate limits") from e
         except Exception as e:  # noqa: BLE001 (boundary)
             raise LLMError("LLM request failed") from e
 
