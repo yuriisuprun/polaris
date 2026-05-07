@@ -14,6 +14,8 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+
 
 class LLMError(RuntimeError):
     pass
@@ -117,8 +119,8 @@ class LLMClient:
         json_schema: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Enforces structured JSON output using OpenAI chat.completions with JSON schema.
-        Handles rate limiting with exponential backoff.
+        Enforces structured output using OpenAI responses.create() API.
+        This is the newer endpoint that supports MCP and structured outputs.
         Raises LLMError if the model output cannot be parsed or validated by the API.
         """
         cache_key = sha256(
@@ -144,9 +146,9 @@ class LLMClient:
                 retry=retry_if_exception(lambda e: is_rate_limit_error(e) or isinstance(e, Exception)),
             ):
                 with attempt:
-                    resp = await self._client.chat.completions.create(
+                    resp = await self._client.responses.create(
                         model=self._model,
-                        messages=[
+                        input=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
@@ -167,18 +169,15 @@ class LLMClient:
         except Exception as e:  # noqa: BLE001 (boundary)
             raise LLMError(f"LLM request failed: {str(e)}") from e
 
-        # Extract content from the new response format
-        if not resp.choices or len(resp.choices) == 0:
-            raise LLMError("LLM response contained no choices")
-        
-        text = resp.choices[0].message.content
+        # Extract content from responses API format
+        text = getattr(resp, "output_text", None)
         if not text or not isinstance(text, str):
-            raise LLMError("LLM response contained no content")
+            raise LLMError("LLM response contained no output_text")
 
         try:
             parsed = json.loads(text)
         except Exception as e:  # noqa: BLE001 (boundary)
-            logger.warning("Failed to parse JSON from LLM", extra={"content": text})
+            logger.warning("Failed to parse JSON from LLM", extra={"output_text": text})
             raise LLMError("LLM returned invalid JSON") from e
 
         if not isinstance(parsed, dict):
