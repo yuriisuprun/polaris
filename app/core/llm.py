@@ -8,7 +8,6 @@ from functools import lru_cache
 from typing import Any
 
 from openai import AsyncOpenAI, RateLimitError
-from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential_jitter
 
 from app.core.config import get_settings
 
@@ -82,10 +81,10 @@ class MockLLMClient:
 
 
 class LLMClient:
-    def __init__(self, api_key: str, model: str, timeout_s: int, max_retries: int) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_s)
+    def __init__(self, api_key: str, model: str, timeout_s: int) -> None:
+        # Disable SDK retries - we handle retries ourselves
+        self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_s, max_retries=0)
         self._model = model
-        self._max_retries = max_retries
         self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._cache_ttl_s = 300.0
         self._cache_max_items = 128
@@ -119,8 +118,7 @@ class LLMClient:
     ) -> dict[str, Any]:
         """
         Enforces structured JSON output using OpenAI chat.completions with JSON schema.
-        Falls back to mock client if API fails.
-        Raises LLMError if the model output cannot be parsed or validated by the API.
+        Falls back to mock client if API fails or quota is exhausted.
         """
         cache_key = sha256(
             (self._model + "\n" + system_prompt + "\n" + user_prompt + "\n" + json.dumps(json_schema, sort_keys=True)).encode(
@@ -132,27 +130,21 @@ class LLMClient:
             return cached
 
         try:
-            async for attempt in AsyncRetrying(
-                wait=wait_exponential_jitter(initial=2, max=30),
-                stop=stop_after_attempt(self._max_retries),
-                reraise=True,
-            ):
-                with attempt:
-                    resp = await self._client.chat.completions.create(
-                        model=self._model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        response_format={
-                            "type": "json_schema",
-                            "json_schema": {
-                                "name": "study_helper_output",
-                                "schema": json_schema,
-                                "strict": True,
-                            },
-                        },
-                    )
+            resp = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "study_helper_output",
+                        "schema": json_schema,
+                        "strict": True,
+                    },
+                },
+            )
             
             # Extract content from the response
             if not resp.choices or len(resp.choices) == 0:
@@ -174,9 +166,20 @@ class LLMClient:
             self._cache_set(cache_key, parsed)
             return parsed
             
-        except (RateLimitError, RetryError, LLMError) as e:
-            # Fall back to mock client on API errors
-            logger.warning(f"OpenAI API failed ({type(e).__name__}), falling back to mock client: {str(e)}")
+        except RateLimitError as e:
+            # Check for insufficient_quota - fall back immediately without retrying
+            error_text = str(e)
+            if "insufficient_quota" in error_text:
+                logger.warning("OpenAI quota exhausted, falling back to mock client immediately")
+                result = await self._mock_fallback.generate_structured(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    json_schema=json_schema,
+                )
+                self._cache_set(cache_key, result)
+                return result
+            # For other rate limits, also fall back
+            logger.warning(f"OpenAI API rate limited: {error_text}")
             result = await self._mock_fallback.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -185,8 +188,8 @@ class LLMClient:
             self._cache_set(cache_key, result)
             return result
         except Exception as e:  # noqa: BLE001 (boundary)
-            logger.error(f"Unexpected error in LLM client: {str(e)}")
-            # Final fallback to mock
+            logger.error(f"LLM client error: {str(e)}")
+            # Fall back to mock on any error
             result = await self._mock_fallback.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -200,6 +203,11 @@ class LLMClient:
 def get_llm() -> LLMClient | MockLLMClient:
     settings = get_settings()
     
+    # If USE_MOCK_LLM is enabled, skip OpenAI entirely
+    if settings.use_mock_llm:
+        logger.info("USE_MOCK_LLM is enabled, using mock LLM client")
+        return MockLLMClient()
+    
     # Check if we have a valid-looking API key
     # OpenAI API keys typically start with 'sk-' and are at least 20 chars
     has_valid_key = (
@@ -211,7 +219,7 @@ def get_llm() -> LLMClient | MockLLMClient:
     if not has_valid_key:
         logger.warning(
             "No valid OpenAI API key found. Using mock LLM client for development. "
-            "Set a valid OPENAI_API_KEY in .env file for real AI responses."
+            "Set a valid OPENAI_API_KEY in .env file for real AI responses, or set USE_MOCK_LLM=true to skip this warning."
         )
         return MockLLMClient()
     
@@ -219,5 +227,4 @@ def get_llm() -> LLMClient | MockLLMClient:
         api_key=settings.openai_api_key,
         model=settings.openai_model,
         timeout_s=settings.openai_timeout_s,
-        max_retries=settings.openai_max_retries,
     )

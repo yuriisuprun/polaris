@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     openai_timeout_s: int = Field(default=30, alias="OPENAI_TIMEOUT_S")
-    openai_max_retries: int = Field(default=3, alias="OPENAI_MAX_RETRIES")
+    openai_max_retries: int = Field(default=0, alias="OPENAI_MAX_RETRIES")
+    use_mock_llm: bool = Field(default=False, alias="USE_MOCK_LLM")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     storage_path: str = Field(default="./data/storage.json", alias="STORAGE_PATH")
