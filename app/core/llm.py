@@ -122,7 +122,7 @@ class LLMClient:
         json_schema: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Enforces structured JSON output using Groq chat.completions with JSON schema.
+        Enforces structured JSON output using Groq chat.completions with JSON mode.
         Implements request throttling for free tier rate limits and exponential backoff retry.
         Falls back to mock client if API fails or quota is exhausted.
         """
@@ -148,13 +148,21 @@ class LLMClient:
                 await asyncio.sleep(wait_time)
             _last_request_time = time.time()
 
+        # Include schema in system prompt for Groq (since it doesn't enforce schemas like OpenAI)
+        schema_instruction = (
+            f"\n\nYou MUST respond with valid JSON matching this exact schema:\n"
+            f"{json.dumps(json_schema, indent=2)}\n"
+            f"Do not include any text before or after the JSON object."
+        )
+        enhanced_system_prompt = system_prompt + schema_instruction
+
         # Retry loop with exponential backoff
         for attempt in range(self._max_retries):
             try:
                 resp = await self._client.chat.completions.create(
                     model=self._model,
                     messages=[
-                        {"role": "system", "content": system_prompt},
+                        {"role": "system", "content": enhanced_system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     response_format={"type": "json_object"},
