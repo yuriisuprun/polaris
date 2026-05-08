@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -12,6 +13,12 @@ from openai import AsyncOpenAI, RateLimitError
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Global request throttle for free tier rate limiting
+# Free tier: 3 requests per minute = 1 request per 20 seconds
+_request_lock = asyncio.Lock()
+_last_request_time = 0.0
+_min_request_interval_s = 20.0  # Conservative: 3 req/min
 
 
 class LLMError(RuntimeError):
@@ -75,7 +82,7 @@ class MockLLMClient:
 
 
 class LLMClient:
-    def __init__(self, api_key: str, model: str, timeout_s: int) -> None:
+    def __init__(self, api_key: str, model: str, timeout_s: int, rate_limit_min_interval_s: float = 20.0, rate_limit_max_retries: int = 5) -> None:
         # Disable SDK retries - we handle retries ourselves
         self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_s, max_retries=0)
         self._model = model
@@ -83,6 +90,10 @@ class LLMClient:
         self._cache_ttl_s = 300.0
         self._cache_max_items = 128
         self._mock_fallback = MockLLMClient()
+        # Retry configuration for rate limits
+        self._max_retries = rate_limit_max_retries
+        self._initial_retry_delay_s = 2.0  # Start with 2 seconds
+        self._min_request_interval_s = rate_limit_min_interval_s
 
     def _cache_get(self, key: str) -> dict[str, Any] | None:
         now = time.time()
@@ -112,8 +123,11 @@ class LLMClient:
     ) -> dict[str, Any]:
         """
         Enforces structured JSON output using OpenAI chat.completions with JSON schema.
+        Implements request throttling for free tier rate limits and exponential backoff retry.
         Falls back to mock client if API fails or quota is exhausted.
         """
+        global _last_request_time
+        
         cache_key = sha256(
             (self._model + "\n" + system_prompt + "\n" + user_prompt + "\n" + json.dumps(json_schema, sort_keys=True)).encode(
                 "utf-8"
@@ -121,50 +135,99 @@ class LLMClient:
         ).hexdigest()
         cached = self._cache_get(cache_key)
         if cached is not None:
+            logger.debug("Cache hit for LLM request", extra={"cache_key": cache_key[:8]})
             return cached
 
-        try:
-            resp = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "study_helper_output",
-                        "schema": json_schema,
-                        "strict": True,
-                    },
-                },
-            )
-            
-            # Extract content from the response
-            if not resp.choices or len(resp.choices) == 0:
-                raise LLMError("LLM response contained no choices")
-            
-            text = resp.choices[0].message.content
-            if not text or not isinstance(text, str):
-                raise LLMError("LLM response contained no content")
+        # Throttle requests to respect free tier rate limits
+        async with _request_lock:
+            now = time.time()
+            time_since_last = now - _last_request_time
+            if time_since_last < self._min_request_interval_s:
+                wait_time = self._min_request_interval_s - time_since_last
+                logger.debug(f"Rate limit throttle: waiting {wait_time:.1f}s", extra={"wait_time_s": wait_time})
+                await asyncio.sleep(wait_time)
+            _last_request_time = time.time()
 
+        # Retry loop with exponential backoff
+        for attempt in range(self._max_retries):
             try:
-                parsed = json.loads(text)
-            except Exception as e:  # noqa: BLE001 (boundary)
-                logger.warning("Failed to parse JSON from LLM", extra={"content": text})
-                raise LLMError("LLM returned invalid JSON") from e
+                resp = await self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "study_helper_output",
+                            "schema": json_schema,
+                            "strict": True,
+                        },
+                    },
+                )
+                
+                # Extract content from the response
+                if not resp.choices or len(resp.choices) == 0:
+                    raise LLMError("LLM response contained no choices")
+                
+                text = resp.choices[0].message.content
+                if not text or not isinstance(text, str):
+                    raise LLMError("LLM response contained no content")
 
-            if not isinstance(parsed, dict):
-                raise LLMError("LLM JSON output must be an object")
-            
-            self._cache_set(cache_key, parsed)
-            return parsed
-            
-        except RateLimitError as e:
-            # Check for insufficient_quota - fall back immediately without retrying
-            error_text = str(e)
-            if "insufficient_quota" in error_text:
-                logger.warning("OpenAI quota exhausted, falling back to mock client immediately")
+                try:
+                    parsed = json.loads(text)
+                except Exception as e:  # noqa: BLE001 (boundary)
+                    logger.warning("Failed to parse JSON from LLM", extra={"content": text})
+                    raise LLMError("LLM returned invalid JSON") from e
+
+                if not isinstance(parsed, dict):
+                    raise LLMError("LLM JSON output must be an object")
+                
+                self._cache_set(cache_key, parsed)
+                logger.debug("LLM request successful", extra={"attempt": attempt + 1})
+                return parsed
+                
+            except RateLimitError as e:
+                error_text = str(e)
+                
+                # Check for insufficient_quota - fall back immediately without retrying
+                if "insufficient_quota" in error_text.lower():
+                    logger.warning("OpenAI quota exhausted, falling back to mock client immediately", extra={"error": error_text})
+                    result = await self._mock_fallback.generate_structured(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        json_schema=json_schema,
+                    )
+                    self._cache_set(cache_key, result)
+                    return result
+                
+                # For rate limits (429), retry with exponential backoff
+                if attempt < self._max_retries - 1:
+                    retry_delay = self._initial_retry_delay_s * (2 ** attempt)
+                    logger.warning(
+                        f"OpenAI rate limited (429). Retrying in {retry_delay:.1f}s (attempt {attempt + 1}/{self._max_retries})",
+                        extra={"attempt": attempt + 1, "max_retries": self._max_retries, "retry_delay_s": retry_delay, "error": error_text}
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    # Max retries exceeded, fall back to mock
+                    logger.warning(
+                        f"OpenAI rate limit persisted after {self._max_retries} retries, falling back to mock client",
+                        extra={"max_retries": self._max_retries, "error": error_text}
+                    )
+                    result = await self._mock_fallback.generate_structured(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        json_schema=json_schema,
+                    )
+                    self._cache_set(cache_key, result)
+                    return result
+                    
+            except Exception as e:  # noqa: BLE001 (boundary)
+                logger.error(f"LLM client error: {str(e)}", extra={"attempt": attempt + 1, "error_type": type(e).__name__})
+                # Fall back to mock on any other error
                 result = await self._mock_fallback.generate_structured(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
@@ -172,25 +235,16 @@ class LLMClient:
                 )
                 self._cache_set(cache_key, result)
                 return result
-            # For other rate limits, also fall back
-            logger.warning(f"OpenAI API rate limited: {error_text}")
-            result = await self._mock_fallback.generate_structured(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                json_schema=json_schema,
-            )
-            self._cache_set(cache_key, result)
-            return result
-        except Exception as e:  # noqa: BLE001 (boundary)
-            logger.error(f"LLM client error: {str(e)}")
-            # Fall back to mock on any error
-            result = await self._mock_fallback.generate_structured(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                json_schema=json_schema,
-            )
-            self._cache_set(cache_key, result)
-            return result
+        
+        # Should not reach here, but just in case
+        logger.error("LLM client exhausted all retries without success")
+        result = await self._mock_fallback.generate_structured(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            json_schema=json_schema,
+        )
+        self._cache_set(cache_key, result)
+        return result
 
 
 @lru_cache(maxsize=1)
@@ -221,4 +275,6 @@ def get_llm() -> LLMClient | MockLLMClient:
         api_key=settings.openai_api_key,
         model=settings.openai_model,
         timeout_s=settings.openai_timeout_s,
+        rate_limit_min_interval_s=settings.rate_limit_min_interval_s,
+        rate_limit_max_retries=settings.rate_limit_max_retries,
     )

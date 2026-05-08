@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     openai_timeout_s: int = Field(default=30, alias="OPENAI_TIMEOUT_S")
     openai_max_retries: int = Field(default=0, alias="OPENAI_MAX_RETRIES")
     use_mock_llm: bool = Field(default=False, alias="USE_MOCK_LLM")
+    
+    # Rate limiting for free tier (3 requests per minute = 20 seconds between requests)
+    rate_limit_min_interval_s: float = Field(default=20.0, alias="RATE_LIMIT_MIN_INTERVAL_S")
+    rate_limit_max_retries: int = Field(default=5, alias="RATE_LIMIT_MAX_RETRIES")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     storage_path: str = Field(default="./data/storage.json", alias="STORAGE_PATH")

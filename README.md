@@ -29,6 +29,8 @@ Environment variables:
 - **`OPENAI_MAX_RETRIES`**: retries for transient upstream failures (default `3`)
 - **`LOG_LEVEL`**: `DEBUG|INFO|WARNING|ERROR|CRITICAL` (default `INFO`)
 - **`STORAGE_PATH`**: JSON file path for spaced repetition state (default `./data/storage.json`)
+- **`RATE_LIMIT_MIN_INTERVAL_S`**: minimum seconds between API requests for free tier compliance (default `20.0` = 3 req/min)
+- **`RATE_LIMIT_MAX_RETRIES`**: number of retries for rate limit errors with exponential backoff (default `5`)
 
 ## Local setup
 
@@ -65,6 +67,25 @@ Docs:
 5. **Schedule reviews** (`/schedule_review`) after each recall attempt:
    - Use `difficulty` from `1` (easy) to `5` (hard)
    - Use a stable `user_id` and `item_id` so the server can keep repetition state
+
+## Free Tier Support
+
+This server is optimized to work with **OpenAI free tier** accounts:
+
+- **Automatic rate limiting**: Enforces 20-second minimum between requests (3 req/min) by default
+- **Exponential backoff retries**: Automatically retries rate-limited requests (429 errors) up to 5 times
+- **Smart caching**: Caches responses for 5 minutes to reduce redundant API calls
+- **Graceful fallback**: Falls back to mock responses if rate limits are exceeded after retries
+
+### Adjusting for your plan
+
+If you have a paid OpenAI plan with higher rate limits, adjust in `.env`:
+
+```bash
+# For paid tier with higher limits (e.g., 100 req/min)
+RATE_LIMIT_MIN_INTERVAL_S=0.6  # ~100 requests per minute
+RATE_LIMIT_MAX_RETRIES=3       # Fewer retries needed
+```
 
 ## Docker
 
