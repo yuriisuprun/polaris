@@ -51,10 +51,24 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
     )
 
 
-async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     # Normalize all HTTPExceptions into the same envelope.
     msg = exc.detail if isinstance(exc.detail, str) else "Request failed"
-    logger.info("http_exception", extra={"status_code": exc.status_code, "request_id": get_request_id()})
+    
+    # Log request body for debugging JSON parsing issues
+    try:
+        body = await request.body()
+        if body:
+            logger.info("http_exception", extra={
+                "status_code": exc.status_code, 
+                "request_id": get_request_id(),
+                "body_preview": body[:200].decode('utf-8', errors='replace')
+            })
+        else:
+            logger.info("http_exception", extra={"status_code": exc.status_code, "request_id": get_request_id()})
+    except Exception:
+        logger.info("http_exception", extra={"status_code": exc.status_code, "request_id": get_request_id()})
+    
     return _error_payload(code="HTTP_ERROR", message=msg, status_code=exc.status_code)
 
 

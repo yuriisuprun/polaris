@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import logging
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import Request
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging
@@ -19,6 +23,8 @@ from app.tools.explain import router as explain_router
 from app.tools.flashcards import router as flashcards_router
 from app.tools.quiz import router as quiz_router
 from app.tools.review import router as review_router
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
