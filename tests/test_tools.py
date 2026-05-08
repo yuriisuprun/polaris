@@ -40,7 +40,7 @@ class _FakeLLM:
 @pytest.fixture(autouse=True)
 def _env(monkeypatch, tmp_path):
     # Ensure config reads without needing a real key and isolate storage.
-    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("GROQ_API_KEY", "test")
     monkeypatch.setenv("STORAGE_PATH", str(tmp_path / "storage.json"))
 
     # Patch get_llm to avoid network calls.

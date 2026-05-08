@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("GROQ_API_KEY", "test")
     monkeypatch.setenv("STORAGE_PATH", str(tmp_path / "storage.json"))
 
 

@@ -11,10 +11,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = Field(default="dev", alias="APP_ENV")
-    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
-    openai_timeout_s: int = Field(default=30, alias="OPENAI_TIMEOUT_S")
-    openai_max_retries: int = Field(default=0, alias="OPENAI_MAX_RETRIES")
+    groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
+    groq_timeout_s: int = Field(default=30, alias="GROQ_TIMEOUT_S")
+    groq_max_retries: int = Field(default=3, alias="GROQ_MAX_RETRIES")
     use_mock_llm: bool = Field(default=False, alias="USE_MOCK_LLM")
     
     # Rate limiting for free tier (3 requests per minute = 20 seconds between requests)

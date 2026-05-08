@@ -24,8 +24,8 @@ from app.tools.review import router as review_router
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
-    if settings.is_prod and not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY must be set in production")
+    if settings.is_prod and not settings.groq_api_key:
+        raise RuntimeError("GROQ_API_KEY must be set in production")
 
     app = FastAPI(
         title="Memora - study helper MCP Server",
