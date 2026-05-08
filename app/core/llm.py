@@ -21,13 +21,7 @@ class LLMError(RuntimeError):
 class MockLLMClient:
     """Mock LLM client for development/testing when no valid API key is available."""
     
-    async def generate_structured(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        json_schema: dict[str, Any],
-    ) -> dict[str, Any]:
+    async def generate_structured(self, *, system_prompt: str, user_prompt: str, json_schema: dict[str, Any], ) -> dict[str, Any]:
         """
         Return deterministic mock responses based on the prompt type.
         """
