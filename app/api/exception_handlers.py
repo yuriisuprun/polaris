@@ -37,7 +37,7 @@ async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
 
 async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     # Avoid echoing full payload; give clients structured, actionable fields only.
-    logger.info("validation_error", extra={"request_id": get_request_id()})
+    logger.info("validation_error", extra={"request_id": get_request_id(), "errors": str(exc.errors())})
     return JSONResponse(
         status_code=422,
         content={
