@@ -66,7 +66,7 @@ For local development without API costs:
 
 ```bash
 # .env
-USE_MOCK_LLM=true
+USE_MOCK_LLM=false
 ```
 
 This:
