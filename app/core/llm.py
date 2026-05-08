@@ -157,10 +157,7 @@ class LLMClient:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    response_format={
-                        "type": "json_object",
-                        "schema": json_schema,
-                    },
+                    response_format={"type": "json_object"},
                 )
                 
                 # Extract content from the response
