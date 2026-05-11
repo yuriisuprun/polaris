@@ -48,7 +48,7 @@ Thumbs.db
 .vscode/
 
 # AI/Agent configuration
-.kiro/steering/
+.kiro/
 
 # Docker local overrides
 docker-compose.override.yml
