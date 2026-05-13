@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
-    if settings.is_prod and not settings.groq_api_key:
-        raise RuntimeError("GROQ_API_KEY must be set in production")
+    if not settings.groq_api_key:
+        raise RuntimeError("GROQ_API_KEY must be set to a valid value")
 
     app = FastAPI(
         title="Memora - study helper MCP Server",

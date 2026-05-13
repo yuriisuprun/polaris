@@ -15,9 +15,7 @@ class Settings(BaseSettings):
     groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
     groq_timeout_s: int = Field(default=30, alias="GROQ_TIMEOUT_S")
     groq_max_retries: int = Field(default=3, alias="GROQ_MAX_RETRIES")
-    use_mock_llm: bool = Field(default=False, alias="USE_MOCK_LLM")
-    
-    # Rate limiting for free tier (3 requests per minute = 20 seconds between requests)
+    # Rate limiting defaults can be tuned per Groq plan limits.
     rate_limit_min_interval_s: float = Field(default=20.0, alias="RATE_LIMIT_MIN_INTERVAL_S")
     rate_limit_max_retries: int = Field(default=5, alias="RATE_LIMIT_MAX_RETRIES")
 
